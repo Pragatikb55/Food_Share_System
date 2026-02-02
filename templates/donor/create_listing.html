@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Create Food Listing - FoodShare{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10 col-lg-8">
+        <div class="card shadow">
+            <div class="card-body p-4">
+                <h2 class="mb-4">Create Food Listing</h2>
+                <p class="text-muted mb-4">List your surplus food to be claimed by NGOs and volunteers.</p>
+                
+                <form method="POST" action="{{ url_for('create_listing') }}">
+                    <!-- Basic Information -->
+                    <div class="mb-4">
+                        <h5 class="mb-3">Basic Information</h5>
+                        
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Food Item / Meal Name *</label>
+                            <input type="text" class="form-control" id="title" name="title" 
+                                   placeholder="e.g., Buffet Meals, Sandwiches, Packaged Food" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" 
+                                      rows="3" placeholder="Describe the food items..."></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="food_type" class="form-label">Food Type *</label>
+                                <select class="form-select" id="food_type" name="food_type" required>
+                                    <option value="">Select type...</option>
+                                    <option value="cooked">Cooked Food</option>
+                                    <option value="packaged">Packaged Food</option>
+                                    <option value="raw">Raw Ingredients</option>
+                                    <option value="baked">Baked Goods</option>
+                                    <option value="fresh">Fresh Produce</option>
+                                    <option value="frozen">Frozen Food</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="quantity" class="form-label">Quantity (Number of meals) *</label>
+                                <input type="number" class="form-control" id="quantity" name="quantity" 
+                                       min="1" max="10000" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Location & Pickup -->
+                    <div class="mb-4">
+                        <h5 class="mb-3">Location & Pickup</h5>
+                        
+                        <div class="mb-3">
+                            <label for="location" class="form-label">Location Name *</label>
+                            <input type="text" class="form-control" id="location" name="location" 
+                                   placeholder="e.g., Grand Hotel, Main Kitchen" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="pickup_address" class="form-label">Pickup Address *</label>
+                            <textarea class="form-control" id="pickup_address" name="pickup_address" 
+                                      rows="2" placeholder="Full address for pickup..." required></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="pickup_start" class="form-label">Pickup Start Time *</label>
+                                <input type="datetime-local" class="form-control" id="pickup_start" 
+                                       name="pickup_start" value="{{ default_start }}" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="pickup_end" class="form-label">Pickup End Time *</label>
+                                <input type="datetime-local" class="form-control" id="pickup_end" 
+                                       name="pickup_end" value="{{ default_end }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Food Safety -->
+                    <div class="mb-4">
+                        <h5 class="mb-3">Food Safety Information</h5>
+                        
+                        <div class="mb-3">
+                            <label for="allergens" class="form-label">Allergens / Special Notes</label>
+                            <textarea class="form-control" id="allergens" name="allergens" 
+                                      rows="2" placeholder="e.g., Contains nuts, gluten-free, etc."></textarea>
+                            <div class="form-text">Please list any allergens or special handling instructions.</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Submit -->
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('donor_dashboard') }}" class="btn btn-outline-secondary me-2">Cancel</a>
+                        <button type="submit" class="btn btn-success">Create Listing</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Food Safety Guidelines -->
+        <div class="card mt-4 border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Food Safety Guidelines</h5>
+            </div>
+            <div class="card-body">
+                <ul class="mb-0">
+                    <li>Only donate food that is safe to eat and within its shelf life</li>
+                    <li>Keep hot food hot (above 60°C) and cold food cold (below 5°C)</li>
+                    <li>Pack food securely to prevent contamination during transport</li>
+                    <li>Label food with preparation time and any allergens</li>
+                    <li>Follow local health department guidelines</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Set minimum pickup times
+    document.addEventListener('DOMContentLoaded', function() {
+        const now = new Date();
+        const minStart = now.toISOString().slice(0, 16);
+        
+        document.getElementById('pickup_start').min = minStart;
+        document.getElementById('pickup_end').min = minStart;
+        
+        // Auto-adjust end time when start time changes
+        document.getElementById('pickup_start').addEventListener('change', function() {
+            const startTime = new Date(this.value);
+            const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000); // 2 hours later
+            document.getElementById('pickup_end').value = endTime.toISOString().slice(0, 16);
+        });
+    });
+</script>
+{% endblock %}

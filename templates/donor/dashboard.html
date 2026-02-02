@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Donor Dashboard - FoodShare{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1 class="h2">Donor Dashboard</h1>
+        <p class="text-muted">Welcome, {{ current_user.organization or current_user.username }}!</p>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card border-success">
+            <div class="card-body text-center">
+                <h5 class="card-title text-success">{{ total_listings }}</h5>
+                <p class="card-text">Total Listings</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-primary">
+            <div class="card-body text-center">
+                <h5 class="card-title text-primary">{{ available_listings }}</h5>
+                <p class="card-text">Available</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-warning">
+            <div class="card-body text-center">
+                <h5 class="card-title text-warning">{{ claimed_listings }}</h5>
+                <p class="card-text">Claimed</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-info">
+            <div class="card-body text-center">
+                <h5 class="card-title text-info">{{ total_meals }}</h5>
+                <p class="card-text">Meals Donated</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Quick Actions</h5>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('create_listing') }}" class="btn btn-success">
+                        <i class="bi bi-plus-circle"></i> Create New Listing
+                    </a>
+                    <a href="{{ url_for('my_listings') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-list-ul"></i> View My Listings
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Listings -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title d-flex justify-content-between align-items-center">
+                    Recent Food Listings
+                    <a href="{{ url_for('my_listings') }}" class="btn btn-sm btn-outline-primary">View All</a>
+                </h5>
+                
+                {% if listings %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Food Item</th>
+                                <th>Quantity</th>
+                                <th>Pickup Time</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for listing in listings[:5] %}
+                            <tr>
+                                <td>{{ listing.title }}</td>
+                                <td>{{ listing.quantity }} meals</td>
+                                <td>
+                                    {{ listing.pickup_start.strftime('%b %d, %I:%M %p') }}
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ 
+                                        'success' if listing.status == 'available' 
+                                        else 'warning' if listing.status == 'claimed' 
+                                        else 'info' if listing.status == 'picked_up'
+                                        else 'secondary'
+                                    }}">
+                                        {{ listing.status|title }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <a href="#" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="bi bi-emoji-frown display-4 text-muted"></i>
+                    <p class="mt-3">You haven't created any food listings yet.</p>
+                    <a href="{{ url_for('create_listing') }}" class="btn btn-success">Create Your First Listing</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Claims (if any) -->
+{% if claims %}
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Recent Claims</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Food Item</th>
+                                <th>Claimed By</th>
+                                <th>Claim Time</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for claim in claims[:5] %}
+                            <tr>
+                                <td>{{ claim.food_listing.title }}</td>
+                                <td>{{ claim.receiver.organization or claim.receiver.username }}</td>
+                                <td>{{ claim.created_at.strftime('%b %d, %I:%M %p') }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 
+                                        'warning' if claim.status == 'pending' 
+                                        else 'primary' if claim.status == 'confirmed'
+                                        else 'success' if claim.status == 'picked_up'
+                                        else 'secondary'
+                                    }}">
+                                        {{ claim.status|title }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary">Contact</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

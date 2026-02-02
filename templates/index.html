@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero-section text-center py-5 bg-light rounded">
+    <h1 class="display-4 text-success mb-4">Reduce Food Waste, Feed People</h1>
+    <p class="lead mb-4">Connect surplus food from hotels, restaurants, and events with NGOs and people in need.</p>
+    
+    <div class="row g-4 mb-5">
+        <div class="col-md-4">
+            <div class="card h-100 border-success">
+                <div class="card-body text-center">
+                    <i class="bi bi-building display-4 text-success mb-3"></i>
+                    <h3 class="card-title">For Donors</h3>
+                    <p class="card-text">Hotels, Restaurants, Event Planners</p>
+                    <ul class="list-unstyled text-start">
+                        <li><i class="bi bi-check text-success"></i> List surplus food easily</li>
+                        <li><i class="bi bi-check text-success"></i> Schedule pickups</li>
+                        <li><i class="bi bi-check text-success"></i> Track your impact</li>
+                        <li><i class="bi bi-check text-success"></i> Reduce waste costs</li>
+                    </ul>
+                    {% if not current_user.is_authenticated %}
+                    <a href="{{ url_for('register') }}?role=donor" class="btn btn-success mt-3">Register as Donor</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card h-100 border-warning">
+                <div class="card-body text-center">
+                    <i class="bi bi-people display-4 text-warning mb-3"></i>
+                    <h3 class="card-title">For NGOs</h3>
+                    <p class="card-text">Charities, Shelters, Food Banks</p>
+                    <ul class="list-unstyled text-start">
+                        <li><i class="bi bi-check text-warning"></i> Find food near you</li>
+                        <li><i class="bi bi-check text-warning"></i> Real-time notifications</li>
+                        <li><i class="bi bi-check text-warning"></i> Coordinate volunteers</li>
+                        <li><i class="bi bi-check text-warning"></i> Help more people</li>
+                    </ul>
+                    {% if not current_user.is_authenticated %}
+                    <a href="{{ url_for('register') }}?role=ngo" class="btn btn-warning mt-3">Register as NGO</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card h-100 border-info">
+                <div class="card-body text-center">
+                    <i class="bi bi-graph-up display-4 text-info mb-3"></i>
+                    <h3 class="card-title">Our Impact</h3>
+                    <div class="display-6 text-success">{{ total_meals }}</div>
+                    <p class="card-text">Meals Donated</p>
+                    <div class="display-6 text-primary">{{ total_donations }}</div>
+                    <p class="card-text">Food Donations</p>
+                    <div class="display-6 text-warning">{{ total_ngos + total_donors }}</div>
+                    <p class="card-text">Active Partners</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="how-it-works mt-5">
+    <h2 class="text-center mb-5">How It Works</h2>
+    <div class="row text-center g-4">
+        <div class="col-md-3">
+            <div class="step-number bg-success rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                <span class="text-white h4">1</span>
+            </div>
+            <h4>List Food</h4>
+            <p>Donors post surplus food with details and pickup time</p>
+        </div>
+        <div class="col-md-3">
+            <div class="step-number bg-warning rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                <span class="text-white h4">2</span>
+            </div>
+            <h4>Get Alert</h4>
+            <p>NGOs receive instant notifications for nearby food</p>
+        </div>
+        <div class="col-md-3">
+            <div class="step-number bg-info rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                <span class="text-white h4">3</span>
+            </div>
+            <h4>Claim & Collect</h4>
+            <p>NGOs claim food and arrange pickup</p>
+        </div>
+        <div class="col-md-3">
+            <div class="step-number bg-success rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                <span class="text-white h4">4</span>
+            </div>
+            <h4>Distribute</h4>
+            <p>Food reaches people in need within hours</p>
+        </div>
+    </div>
+</div>
+
+<div class="cta-section text-center py-5 mt-5 bg-success text-white rounded">
+    <h2 class="mb-4">Ready to Make a Difference?</h2>
+    <p class="lead mb-4">Join hundreds of businesses and organizations fighting hunger and reducing waste.</p>
+    {% if current_user.is_authenticated %}
+        <a href="{{ url_for('dashboard') }}" class="btn btn-light btn-lg">Go to Dashboard</a>
+    {% else %}
+        <a href="{{ url_for('register') }}" class="btn btn-light btn-lg me-3">Join Now</a>
+        <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-lg">Login</a>
+    {% endif %}
+</div>
+{% endblock %}
