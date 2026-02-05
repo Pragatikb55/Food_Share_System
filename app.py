@@ -32,7 +32,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # 'donor', 'ngo', 'admin'
+    role = db.Column(db.String(20), nullable=False)  # 'donor', 'ngo' (removed 'admin')
     organization = db.Column(db.String(200))
     phone = db.Column(db.String(20))
     address = db.Column(db.Text)
@@ -60,8 +60,7 @@ class User(UserMixin, db.Model):
     def get_role_display(self):
         role_names = {
             'donor': 'Food Donor',
-            'ngo': 'NGO/Organization',
-            'admin': 'Administrator'
+            'ngo': 'NGO/Organization'
         }
         return role_names.get(self.role, self.role)
     
@@ -191,8 +190,6 @@ def login():
                 return redirect(url_for('donor_dashboard'))
             elif user.role == 'ngo':
                 return redirect(url_for('ngo_dashboard'))
-            elif user.role == 'admin':
-                return redirect(url_for('admin_dashboard'))
             else:
                 return redirect(url_for('dashboard'))
         else:
@@ -266,9 +263,9 @@ def dashboard():
         return redirect(url_for('donor_dashboard'))
     elif current_user.role == 'ngo':
         return redirect(url_for('ngo_dashboard'))
-    elif current_user.role == 'admin':
-        return redirect(url_for('admin_dashboard'))
     else:
+        # If somehow a user has invalid role, redirect to index
+        flash('Invalid user role', 'danger')
         return redirect(url_for('index'))
 
 # =============== DONOR ROUTES ===============
@@ -570,63 +567,6 @@ def update_claim_status(claim_id):
     
     return jsonify({'success': False, 'error': 'Invalid status'}), 400
 
-# =============== ADMIN ROUTES ===============
-@app.route('/admin/dashboard')
-@login_required
-def admin_dashboard():
-    """Admin dashboard"""
-    if current_user.role != 'admin':
-        flash('Access denied', 'danger')
-        return redirect(url_for('dashboard'))
-    
-    # Get statistics
-    total_users = User.query.count()
-    total_donors = User.query.filter_by(role='donor').count()
-    total_ngos = User.query.filter_by(role='ngo').count()
-    total_listings = FoodListing.query.count()
-    active_listings = FoodListing.query.filter_by(status='available').count()
-    total_claims = Claim.query.count()
-    completed_claims = Claim.query.filter_by(status='picked_up').count()
-    
-    # Recent activity
-    recent_listings = FoodListing.query.order_by(FoodListing.created_at.desc()).limit(10).all()
-    recent_users = User.query.order_by(User.created_at.desc()).limit(10).all()
-    
-    return render_template('admin/dashboard.html',
-                         total_users=total_users,
-                         total_donors=total_donors,
-                         total_ngos=total_ngos,
-                         total_listings=total_listings,
-                         active_listings=active_listings,
-                         total_claims=total_claims,
-                         completed_claims=completed_claims,
-                         recent_listings=recent_listings,
-                         recent_users=recent_users)
-
-@app.route('/admin/users')
-@login_required
-def admin_users():
-    """Admin user management"""
-    if current_user.role != 'admin':
-        flash('Access denied', 'danger')
-        return redirect(url_for('dashboard'))
-    
-    users = User.query.order_by(User.created_at.desc()).all()
-    
-    return render_template('admin/users.html', users=users)
-
-@app.route('/admin/listings')
-@login_required
-def admin_listings():
-    """Admin food listings management"""
-    if current_user.role != 'admin':
-        flash('Access denied', 'danger')
-        return redirect(url_for('dashboard'))
-    
-    listings = FoodListing.query.order_by(FoodListing.created_at.desc()).all()
-    
-    return render_template('admin/listings.html', listings=listings)
-
 # =============== API ENDPOINTS ===============
 @app.route('/api/notifications')
 @login_required
@@ -665,8 +605,8 @@ def delete_listing(listing_id):
     """Delete a food listing"""
     listing = FoodListing.query.get_or_404(listing_id)
     
-    # Check permission
-    if current_user.role != 'admin' and listing.donor_id != current_user.id:
+    # Check permission - only donor can delete their own listing
+    if listing.donor_id != current_user.id:
         return jsonify({'success': False, 'error': 'Permission denied'}), 403
     
     # Delete associated claims first
@@ -683,11 +623,8 @@ def update_claim(claim_id):
     """Update claim status"""
     claim = Claim.query.get_or_404(claim_id)
     
-    # Check permission
-    if current_user.role != 'ngo' and current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    if current_user.role == 'ngo' and claim.ngo_id != current_user.id:
+    # Check permission - only NGO can update their own claim
+    if current_user.role != 'ngo' or claim.ngo_id != current_user.id:
         return jsonify({'success': False, 'error': 'Permission denied'}), 403
     
     data = request.get_json()
@@ -702,219 +639,6 @@ def update_claim(claim_id):
     db.session.commit()
     
     return jsonify({'success': True})
-
-@app.route('/api/admin/users/<int:user_id>/verify', methods=['POST'])
-@login_required
-def admin_verify_user(user_id):
-    """Admin verify a user"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    user = User.query.get_or_404(user_id)
-    data = request.get_json()
-    user.verified = data.get('verify', True)
-    
-    db.session.commit()
-    
-    return jsonify({'success': True})
-
-@app.route('/api/admin/users/<int:user_id>/active', methods=['POST'])
-@login_required
-def admin_toggle_active(user_id):
-    """Admin toggle user active status"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    user = User.query.get_or_404(user_id)
-    data = request.get_json()
-    user.is_active = data.get('active', True)
-    
-    db.session.commit()
-    
-    return jsonify({'success': True})
-
-@app.route('/api/admin/users/<int:user_id>', methods=['PUT'])
-@login_required
-def admin_update_user(user_id):
-    """Admin update user"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    user = User.query.get_or_404(user_id)
-    data = request.get_json()
-    
-    if 'username' in data:
-        user.username = data['username']
-    if 'email' in data:
-        user.email = data['email']
-    if 'role' in data:
-        user.role = data['role']
-    if 'organization' in data:
-        user.organization = data['organization']
-    if 'phone' in data:
-        user.phone = data['phone']
-    
-    db.session.commit()
-    
-    return jsonify({'success': True})
-
-@app.route('/api/admin/users', methods=['POST'])
-@login_required
-def admin_create_user():
-    """Admin create new user"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    data = request.get_json()
-    
-    # Check if user exists
-    if User.query.filter_by(email=data['email']).first():
-        return jsonify({'success': False, 'error': 'Email already exists'}), 400
-    
-    user = User(
-        username=data['username'],
-        email=data['email'],
-        role=data['role'],
-        organization=data.get('organization', ''),
-        phone=data.get('phone', ''),
-        verified=data.get('verified', False)
-    )
-    user.set_password(data['password'])
-    
-    db.session.add(user)
-    db.session.commit()
-    
-    return jsonify({'success': True, 'user_id': user.id})
-
-@app.route('/api/admin/listings/<int:listing_id>', methods=['PUT'])
-@login_required
-def admin_update_listing(listing_id):
-    """Admin update listing"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    listing = FoodListing.query.get_or_404(listing_id)
-    data = request.get_json()
-    
-    if 'status' in data:
-        listing.status = data['status']
-    if 'quantity' in data:
-        listing.quantity = data['quantity']
-    if 'pickup_end' in data:
-        listing.pickup_end = datetime.fromisoformat(data['pickup_end'])
-    
-    db.session.commit()
-    
-    return jsonify({'success': True})
-
-@app.route('/api/admin/listings/<int:listing_id>', methods=['DELETE'])
-@login_required
-def admin_delete_listing(listing_id):
-    """Admin delete listing"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    listing = FoodListing.query.get_or_404(listing_id)
-    
-    # Delete associated claims
-    Claim.query.filter_by(food_listing_id=listing_id).delete()
-    
-    # Notify donor if requested
-    data = request.get_json()
-    if data.get('notify_donor'):
-        notification = Notification(
-            user_id=listing.donor_id,
-            title='Listing Removed by Admin',
-            message=f'Your listing "{listing.title}" has been removed by administration.',
-            notification_type='system'
-        )
-        db.session.add(notification)
-    
-    db.session.delete(listing)
-    db.session.commit()
-    
-    return jsonify({'success': True})
-
-@app.route('/api/admin/notifications', methods=['POST'])
-@login_required
-def admin_send_notification():
-    """Admin send notification to users"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    data = request.get_json()
-    target = data.get('target', 'all')
-    title = data.get('title', '')
-    message = data.get('message', '')
-    notification_type = data.get('type', 'info')
-    
-    # Get target users
-    if target == 'all':
-        users = User.query.all()
-    elif target == 'donors':
-        users = User.query.filter_by(role='donor').all()
-    elif target == 'ngos':
-        users = User.query.filter_by(role='ngo').all()
-    elif target == 'admins':
-        users = User.query.filter_by(role='admin').all()
-    else:
-        return jsonify({'success': False, 'error': 'Invalid target'}), 400
-    
-    # Create notifications
-    for user in users:
-        notification = Notification(
-            user_id=user.id,
-            title=title,
-            message=message,
-            notification_type=notification_type
-        )
-        db.session.add(notification)
-    
-    db.session.commit()
-    
-    return jsonify({'success': True, 'count': len(users)})
-
-@app.route('/api/admin/export/listings', methods=['POST'])
-@login_required
-def admin_export_listings():
-    """Admin export listings data"""
-    if current_user.role != 'admin':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    # This is a simplified version - in production, use a proper CSV/Excel library
-    data = request.get_json()
-    
-    # Generate CSV data
-    listings = FoodListing.query.all()
-    
-    # Create CSV in memory
-    output = io.StringIO()
-    writer = csv.writer(output)
-    
-    # Write header
-    writer.writerow(['Title', 'Donor', 'Type', 'Quantity', 'Status', 'Created', 'Pickup Start', 'Pickup End', 'Location'])
-    
-    # Write data
-    for listing in listings:
-        writer.writerow([
-            listing.title,
-            listing.donor.organization or listing.donor.username,
-            listing.food_type,
-            listing.quantity,
-            listing.status,
-            listing.created_at,
-            listing.pickup_start,
-            listing.pickup_end,
-            listing.location
-        ])
-    
-    # Return as downloadable file
-    output.seek(0)
-    response = make_response(output.getvalue())
-    response.headers['Content-Disposition'] = 'attachment; filename=listings_export.csv'
-    response.headers['Content-Type'] = 'text/csv'
-    
-    return response
 
 @app.route('/api/stats/total_meals')
 def get_total_meals():
@@ -1060,23 +784,6 @@ def init_db():
     if not db_initialized:
         db.create_all()
         db_initialized = True
-
-
-    # Create admin user if not exists
-    admin_email = os.getenv('ADMIN_EMAIL', 'admin@foodshare.org')
-    if not User.query.filter_by(email=admin_email).first():
-        admin = User(
-            username='admin',
-            email=admin_email,
-            role='admin',
-            organization='FoodShare Administration',
-            verified=True,
-            is_active=True
-        )
-        admin.set_password(os.getenv('ADMIN_PASSWORD', 'admin123'))
-        db.session.add(admin)
-        db.session.commit()
-        print('✓ Admin user created')
     
     # Cleanup expired listings on startup
     cleanup_expired_listings()
