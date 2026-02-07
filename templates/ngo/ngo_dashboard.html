@@ -1,3 +1,4 @@
+<!-- templates/ngo_dashboard.html -->
 {% extends "base.html" %}
 
 {% block title %}NGO Dashboard - FoodShare{% endblock %}
@@ -53,11 +54,9 @@
             <div class="card-body">
                 <h5 class="card-title">Quick Actions</h5>
                 <div class="d-flex gap-2">
-                    <!-- Fixed: Changed to correct route name -->
                     <a href="{{ url_for('available_food') }}" class="btn btn-warning">
                         <i class="bi bi-search"></i> Find Available Food
                     </a>
-                    <!-- Fixed: Changed to correct route name -->
                     <a href="{{ url_for('my_claims') }}" class="btn btn-outline-primary">
                         <i class="bi bi-list-check"></i> View My Claims
                     </a>
@@ -79,7 +78,7 @@
                 
                 {% if available_listings %}
                 <div class="row g-3">
-                    {% for listing in available_listings[:3] %}
+                    {% for listing in available_listings %}
                     <div class="col-md-4">
                         <div class="card h-100 food-card">
                             <div class="card-body">
@@ -94,11 +93,16 @@
                                     <i class="bi bi-clock"></i> Pickup by: {{ listing.pickup_end.strftime('%I:%M %p') }}
                                 </p>
                                 
-                                <form method="POST" action="{{ url_for('claim_food', listing_id=listing.id) }}">
-                                    <button type="submit" class="btn btn-sm btn-warning w-100">
-                                        <i class="bi bi-cart-check"></i> Claim Food
-                                    </button>
-                                </form>
+                                <div class="d-grid gap-2">
+                                    <form method="POST" action="{{ url_for('claim_food', listing_id=listing.id) }}">
+                                        <button type="submit" class="btn btn-sm btn-warning w-100">
+                                            <i class="bi bi-cart-check"></i> Claim Food
+                                        </button>
+                                    </form>
+                                    <a href="{{ url_for('available_food') }}" class="btn btn-sm btn-outline-secondary w-100">
+                                        <i class="bi bi-info-circle"></i> Details
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -140,7 +144,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for claim in my_claims[:5] %}
+                            {% for claim in my_claims %}
                             <tr>
                                 <td>{{ claim.food_listing.title }}</td>
                                 <td>{{ claim.food_listing.donor.organization or claim.food_listing.donor.username }}</td>
@@ -157,7 +161,7 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-primary">
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#contactModal{{ claim.id }}">
                                         <i class="bi bi-telephone"></i> Contact
                                     </button>
                                 </td>

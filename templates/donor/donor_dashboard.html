@@ -105,11 +105,24 @@
                                         {{ listing.status|title }}
                                     </span>
                                 </td>
-                                <td>
-                                    <a href="#" class="btn btn-sm btn-outline-primary">
+                                <td class="d-flex gap-2">
+                                    <!-- View Button -->
+                                    <a href="{{ url_for('view_listing', listing_id=listing.id) }}"
+                                    class="btn btn-sm btn-outline-primary">
                                         <i class="bi bi-eye"></i> View
                                     </a>
+
+                                    <!-- Delete Button (ALL listings) -->
+                                    <form method="POST"
+                                        action="{{ url_for('delete_listing', listing_id=listing.id) }}"
+                                        onsubmit="return confirm('Are you sure you want to permanently delete this food listing?');">
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            <i class="bi bi-trash"></i> Delete
+                                        </button>
+                                    </form>
                                 </td>
+
+
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -162,9 +175,47 @@
                                     </span>
                                 </td>
                                 <td>
-                                    <button class="btn btn-sm btn-outline-primary">Contact</button>
+                                    <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#contactModal{{ claim.id }}">
+                                        Contact
+                                    </button>
                                 </td>
                             </tr>
+                            
+                            <!-- Contact Modal -->
+                            <div class="modal fade" id="contactModal{{ claim.id }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Contact Receiver</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <h6>Receiver Information</h6>
+                                            <p><strong>Organization:</strong> {{ claim.receiver.organization or claim.receiver.username }}</p>
+                                            <p><strong>Contact Person:</strong> {{ claim.receiver.username }}</p>
+                                            <p><strong>Email:</strong> {{ claim.receiver.email }}</p>
+                                            {% if claim.receiver.phone %}
+                                            <p><strong>Phone:</strong> {{ claim.receiver.phone }}</p>
+                                            {% endif %}
+                                            
+                                            <hr>
+                                            <h6>Claim Details</h6>
+                                            <p><strong>Food Item:</strong> {{ claim.food_listing.title }}</p>
+                                            <p><strong>Quantity:</strong> {{ claim.food_listing.quantity }} meals</p>
+                                            <p><strong>Status:</strong> {{ claim.status|title }}</p>
+                                            {% if claim.notes %}
+                                            <p><strong>Notes:</strong> {{ claim.notes }}</p>
+                                            {% endif %}
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                            <a href="mailto:{{ claim.receiver.email }}" class="btn btn-primary">
+                                                <i class="bi bi-envelope"></i> Send Email
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             {% endfor %}
                         </tbody>
                     </table>

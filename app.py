@@ -32,7 +32,7 @@ class User(UserMixin, db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # 'donor', 'ngo' (removed 'admin')
+    role = db.Column(db.String(20), nullable=False)  # 'donor', 'ngo'
     organization = db.Column(db.String(200))
     phone = db.Column(db.String(20))
     address = db.Column(db.Text)
@@ -149,11 +149,11 @@ def format_datetime(value, format='%b %d, %Y %I:%M %p'):
 # Add filter to Jinja2
 app.jinja_env.filters['datetime'] = format_datetime
 
-# Routes
+# =============== ROUTES ===============
+
 @app.route('/')
 def index():
     """Home page"""
-    # Get some stats for display
     total_donations = FoodListing.query.count()
     total_meals = db.session.query(db.func.sum(FoodListing.quantity)).scalar() or 0
     total_ngos = User.query.filter_by(role='ngo').count()
@@ -234,7 +234,7 @@ def register():
             username=username,
             email=email,
             role=role,
-            organization=organization,
+            organization=organization if role == 'ngo' else None,
             phone=phone
         )
         user.set_password(password)
@@ -264,7 +264,6 @@ def dashboard():
     elif current_user.role == 'ngo':
         return redirect(url_for('ngo_dashboard'))
     else:
-        # If somehow a user has invalid role, redirect to index
         flash('Invalid user role', 'danger')
         return redirect(url_for('index'))
 
@@ -279,29 +278,30 @@ def donor_dashboard():
     
     # Get donor's listings
     listings = FoodListing.query.filter_by(donor_id=current_user.id)\
-        .order_by(FoodListing.created_at.desc()).all()
+        .order_by(FoodListing.created_at.desc()).limit(5).all()
     
     # Get donor's claims (from their listings)
-    claims = Claim.query.join(FoodListing).filter(FoodListing.donor_id == current_user.id)\
-        .order_by(Claim.created_at.desc()).all()
+    claims = Claim.query.join(FoodListing)\
+        .filter(FoodListing.donor_id == current_user.id)\
+        .order_by(Claim.created_at.desc()).limit(5).all()
     
     # Calculate stats
-    total_listings = len(listings)
-    available_listings = len([l for l in listings if l.status == 'available'])
-    claimed_listings = len([l for l in listings if l.status == 'claimed'])
-    picked_up_listings = len([l for l in listings if l.status == 'picked_up'])
-    total_meals = sum([l.quantity for l in listings if l.status == 'picked_up'])
+    total_listings = FoodListing.query.filter_by(donor_id=current_user.id).count()
+    available_listings = FoodListing.query.filter_by(donor_id=current_user.id, status='available').count()
+    claimed_listings = FoodListing.query.filter_by(donor_id=current_user.id, status='claimed').count()
+    total_meals_result = db.session.query(db.func.sum(FoodListing.quantity))\
+        .filter(FoodListing.donor_id == current_user.id, FoodListing.status == 'picked_up').first()
+    total_meals = total_meals_result[0] or 0 if total_meals_result else 0
     
-    return render_template('donor/dashboard.html',
+    return render_template('donor/donor_dashboard.html',
                          listings=listings,
-                         claims=claims[:5],  # Show only recent 5
+                         claims=claims,
                          total_listings=total_listings,
                          available_listings=available_listings,
                          claimed_listings=claimed_listings,
-                         picked_up_listings=picked_up_listings,
                          total_meals=total_meals)
 
-@app.route('/donor/create_listing', methods=['GET', 'POST'])
+@app.route('/create_listing', methods=['GET', 'POST'])
 @login_required
 def create_listing():
     """Create new food listing"""
@@ -322,8 +322,8 @@ def create_listing():
         allergens = request.form.get('allergens', '')
         
         # Convert datetime strings
-        pickup_start = datetime.fromisoformat(pickup_start_str)
-        pickup_end = datetime.fromisoformat(pickup_end_str)
+        pickup_start = datetime.fromisoformat(pickup_start_str.replace('Z', '+00:00'))
+        pickup_end = datetime.fromisoformat(pickup_end_str.replace('Z', '+00:00'))
         
         # Create new listing
         listing = FoodListing(
@@ -359,7 +359,7 @@ def create_listing():
         return redirect(url_for('donor_dashboard'))
     
     # Set default pickup times (now and 2 hours from now)
-    now = datetime.now()
+    now = datetime.utcnow()
     default_start = now.strftime('%Y-%m-%dT%H:%M')
     default_end = (now + timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M')
     
@@ -367,7 +367,7 @@ def create_listing():
                          default_start=default_start,
                          default_end=default_end)
 
-@app.route('/donor/my_listings')
+@app.route('/my_listings')
 @login_required
 def my_listings():
     """View donor's listings"""
@@ -380,35 +380,70 @@ def my_listings():
     
     return render_template('donor/my_listings.html', listings=listings)
 
-@app.route('/donor/listing/<int:listing_id>/update_status', methods=['POST'])
+@app.route('/listing/<int:listing_id>/edit', methods=['GET', 'POST'])
 @login_required
-def update_listing_status(listing_id):
-    """Update listing status (cancel, mark as picked up)"""
+def edit_listing(listing_id):
+    """Edit food listing"""
     if current_user.role != 'donor':
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
+        flash('Access denied', 'danger')
+        return redirect(url_for('dashboard'))
     
     listing = FoodListing.query.get_or_404(listing_id)
     
     if listing.donor_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
+        flash('Access denied', 'danger')
+        return redirect(url_for('my_listings'))
     
-    data = request.get_json()
-    new_status = data.get('status')
+    if listing.status != 'available':
+        flash('Only available listings can be edited', 'warning')
+        return redirect(url_for('my_listings'))
     
-    if new_status in ['cancelled', 'picked_up']:
-        listing.status = new_status
-        
-        # If picked up, update any associated claim
-        if new_status == 'picked_up':
-            claim = Claim.query.filter_by(food_listing_id=listing_id).first()
-            if claim:
-                claim.status = 'picked_up'
-                claim.pickup_time = datetime.utcnow()
+    if request.method == 'POST':
+        listing.title = request.form.get('title')
+        listing.quantity = int(request.form.get('quantity'))
+        pickup_end_str = request.form.get('pickup_end')
+        listing.pickup_end = datetime.fromisoformat(pickup_end_str.replace('Z', '+00:00'))
         
         db.session.commit()
-        return jsonify({'success': True})
+        flash('Listing updated successfully!', 'success')
+        return redirect(url_for('my_listings'))
     
-    return jsonify({'success': False, 'error': 'Invalid status'}), 400
+    return render_template('donor/edit_listing.html', listing=listing)
+
+@app.route('/listing/<int:listing_id>/delete', methods=['POST'])
+@login_required
+def delete_listing(listing_id):
+    if current_user.role != 'donor':
+        flash('Access denied', 'danger')
+        return redirect(url_for('dashboard'))
+
+    listing = FoodListing.query.get_or_404(listing_id)
+
+    if listing.donor_id != current_user.id:
+        flash('Access denied', 'danger')
+        return redirect(url_for('my_listings'))
+
+    # Delete related claims first
+    Claim.query.filter_by(food_listing_id=listing.id).delete()
+
+    db.session.delete(listing)
+    db.session.commit()
+
+    flash('Food listing deleted successfully!', 'success')
+    return redirect(url_for('donor_dashboard'))
+
+
+@app.route('/listing/<int:listing_id>/view')
+@login_required
+def view_listing(listing_id):
+    """View single listing"""
+    listing = FoodListing.query.get_or_404(listing_id)
+    
+    if current_user.role == 'donor' and listing.donor_id != current_user.id:
+        flash('Access denied', 'danger')
+        return redirect(url_for('donor_dashboard'))
+    
+    return render_template('donor/view_listing.html', listing=listing)
 
 # =============== NGO ROUTES ===============
 @app.route('/ngo/dashboard')
@@ -422,27 +457,30 @@ def ngo_dashboard():
     # Get available listings
     available_listings = FoodListing.query.filter_by(status='available')\
         .filter(FoodListing.pickup_end > datetime.utcnow())\
-        .order_by(FoodListing.created_at.desc()).all()
+        .order_by(FoodListing.created_at.desc()).limit(3).all()
     
     # Get NGO's claims
     my_claims = Claim.query.filter_by(ngo_id=current_user.id)\
-        .order_by(Claim.created_at.desc()).all()
+        .order_by(Claim.created_at.desc()).limit(5).all()
     
     # Calculate stats
-    total_claims = len(my_claims)
-    active_claims = len([c for c in my_claims if c.status in ['pending', 'confirmed']])
-    completed_claims = len([c for c in my_claims if c.status == 'picked_up'])
-    total_meals_claimed = sum([c.food_listing.quantity for c in my_claims if c.status == 'picked_up'])
+    total_claims = Claim.query.filter_by(ngo_id=current_user.id).count()
+    active_claims = Claim.query.filter_by(ngo_id=current_user.id)\
+        .filter(Claim.status.in_(['pending', 'confirmed'])).count()
     
-    return render_template('ngo/dashboard.html',
+    # Calculate total meals claimed
+    completed_claims = Claim.query.filter_by(ngo_id=current_user.id, status='picked_up')\
+        .join(FoodListing).all()
+    total_meals_claimed = sum(claim.food_listing.quantity for claim in completed_claims)
+    
+    return render_template('ngo/ngo_dashboard.html',
                          available_listings=available_listings,
                          my_claims=my_claims,
                          total_claims=total_claims,
                          active_claims=active_claims,
-                         completed_claims=completed_claims,
                          total_meals_claimed=total_meals_claimed)
 
-@app.route('/ngo/available_food')
+@app.route('/available_food')
 @login_required
 def available_food():
     """View all available food"""
@@ -450,17 +488,15 @@ def available_food():
         flash('Access denied', 'danger')
         return redirect(url_for('dashboard'))
     
-    from datetime import datetime  # Add import
-    
     listings = FoodListing.query.filter_by(status='available')\
         .filter(FoodListing.pickup_end > datetime.utcnow())\
         .order_by(FoodListing.created_at.desc()).all()
     
     return render_template('ngo/available_food.html', 
                          listings=listings,
-                         datetime=datetime)  # Add this line
+                         datetime=datetime)
 
-@app.route('/ngo/claim/<int:listing_id>', methods=['POST'])
+@app.route('/claim/<int:listing_id>', methods=['POST'])
 @login_required
 def claim_food(listing_id):
     """Claim food listing"""
@@ -472,7 +508,7 @@ def claim_food(listing_id):
     
     if listing.status != 'available':
         flash('This listing is no longer available', 'danger')
-        return redirect(url_for('ngo_dashboard'))
+        return redirect(url_for('available_food'))
     
     # Check if already claimed by this NGO
     existing_claim = Claim.query.filter_by(
@@ -509,7 +545,7 @@ def claim_food(listing_id):
     flash('Food claimed successfully! Please contact the donor for pickup.', 'success')
     return redirect(url_for('ngo_dashboard'))
 
-@app.route('/ngo/my_claims')
+@app.route('/my_claims')
 @login_required
 def my_claims():
     """View NGO's claims"""
@@ -517,16 +553,14 @@ def my_claims():
         flash('Access denied', 'danger')
         return redirect(url_for('dashboard'))
     
-    from datetime import datetime
-    
     claims = Claim.query.filter_by(ngo_id=current_user.id)\
         .order_by(Claim.created_at.desc()).all()
     
     return render_template('ngo/my_claims.html', 
                          claims=claims,
-                         datetime=datetime)  
+                         datetime=datetime)
 
-@app.route('/ngo/claim/<int:claim_id>/update', methods=['POST'])
+@app.route('/claim/<int:claim_id>/update_status', methods=['POST'])
 @login_required
 def update_claim_status(claim_id):
     """Update claim status"""
@@ -540,27 +574,28 @@ def update_claim_status(claim_id):
     
     data = request.get_json()
     new_status = data.get('status')
+    notes = data.get('notes', '')
+    people_served = data.get('people_served')
     
     if new_status in ['confirmed', 'picked_up', 'cancelled']:
         claim.status = new_status
+        claim.notes = notes
         
         if new_status == 'picked_up':
             claim.pickup_time = datetime.utcnow()
             claim.food_listing.status = 'picked_up'
-            claim.people_served = data.get('people_served', claim.food_listing.quantity)
+            claim.people_served = people_served or claim.food_listing.quantity
+            
+            # Create notification for donor
+            notification = Notification(
+                user_id=claim.food_listing.donor_id,
+                title='Food Picked Up!',
+                message=f'{current_user.organization} has picked up {claim.food_listing.title}',
+                notification_type='claim_update'
+            )
+            db.session.add(notification)
         elif new_status == 'cancelled':
             claim.food_listing.status = 'available'
-        
-        claim.notes = data.get('notes', claim.notes)
-        
-        # Create notification for donor
-        notification = Notification(
-            user_id=claim.food_listing.donor_id,
-            title='Claim Status Updated',
-            message=f'Claim for "{claim.food_listing.title}" has been updated to {new_status}.',
-            notification_type='claim_update'
-        )
-        db.session.add(notification)
         
         db.session.commit()
         return jsonify({'success': True})
@@ -573,7 +608,7 @@ def update_claim_status(claim_id):
 def get_notifications():
     """Get user notifications"""
     notifications = Notification.query.filter_by(user_id=current_user.id, is_read=False)\
-        .order_by(Notification.created_at.desc()).all()
+        .order_by(Notification.created_at.desc()).limit(10).all()
     
     return jsonify({
         'count': len(notifications),
@@ -601,41 +636,21 @@ def mark_notification_read(notification_id):
 
 @app.route('/api/listings/<int:listing_id>', methods=['DELETE'])
 @login_required
-def delete_listing(listing_id):
-    """Delete a food listing"""
+def delete_listing_api(listing_id):
+    """Delete a food listing (API endpoint)"""
     listing = FoodListing.query.get_or_404(listing_id)
     
     # Check permission - only donor can delete their own listing
     if listing.donor_id != current_user.id:
         return jsonify({'success': False, 'error': 'Permission denied'}), 403
     
-    # Delete associated claims first
+    if listing.status != 'available':
+        return jsonify({'success': False, 'error': 'Only available listings can be deleted'}), 400
+    
+    # Delete associated claims
     Claim.query.filter_by(food_listing_id=listing_id).delete()
     
     db.session.delete(listing)
-    db.session.commit()
-    
-    return jsonify({'success': True})
-
-@app.route('/api/claims/<int:claim_id>/update', methods=['POST'])
-@login_required
-def update_claim(claim_id):
-    """Update claim status"""
-    claim = Claim.query.get_or_404(claim_id)
-    
-    # Check permission - only NGO can update their own claim
-    if current_user.role != 'ngo' or claim.ngo_id != current_user.id:
-        return jsonify({'success': False, 'error': 'Permission denied'}), 403
-    
-    data = request.get_json()
-    claim.status = data.get('status', claim.status)
-    claim.notes = data.get('notes', claim.notes)
-    claim.people_served = data.get('people_served', claim.people_served)
-    
-    if data.get('status') == 'picked_up':
-        claim.pickup_time = datetime.utcnow()
-        claim.food_listing.status = 'picked_up'
-    
     db.session.commit()
     
     return jsonify({'success': True})
@@ -683,41 +698,6 @@ def get_available_listings():
         })
     
     return jsonify({'listings': result})
-
-@app.route('/api/profile', methods=['GET', 'PUT'])
-@login_required
-def profile_api():
-    """Get or update user profile"""
-    if request.method == 'GET':
-        return jsonify({
-            'username': current_user.username,
-            'email': current_user.email,
-            'role': current_user.role,
-            'organization': current_user.organization,
-            'phone': current_user.phone,
-            'address': current_user.address,
-            'city': current_user.city,
-            'state': current_user.state,
-            'zip_code': current_user.zip_code,
-            'verified': current_user.verified
-        })
-    
-    elif request.method == 'PUT':
-        data = request.get_json()
-        
-        if 'phone' in data:
-            current_user.phone = data['phone']
-        if 'address' in data:
-            current_user.address = data['address']
-        if 'city' in data:
-            current_user.city = data['city']
-        if 'state' in data:
-            current_user.state = data['state']
-        if 'zip_code' in data:
-            current_user.zip_code = data['zip_code']
-        
-        db.session.commit()
-        return jsonify({'success': True})
 
 # =============== ERROR HANDLERS ===============
 @app.errorhandler(404)
@@ -784,11 +764,7 @@ def init_db():
     if not db_initialized:
         db.create_all()
         db_initialized = True
-    
-    # Cleanup expired listings on startup
     cleanup_expired_listings()
-    
-    print('✓ Application initialized')
 
 # =============== MAIN ===============
 if __name__ == '__main__':
